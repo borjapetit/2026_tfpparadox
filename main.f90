@@ -87,11 +87,6 @@ program main
   ! start timing
   timing0 = omp_get_wtime()
 
-  !call solve_lucas(2)
-  !call solve_hugo_fixed(2)
-
-  !goto 91
-
   ! ***********************************************************************************
   ! solve the model according to user's choice
 

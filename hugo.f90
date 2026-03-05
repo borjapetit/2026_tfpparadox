@@ -62,7 +62,7 @@ module hugo
     modsol = mode
 
     ! load model settings
-    open(unit=9,file="txtfiles/in_hugo_fixed_0.txt",action="read") 
+    open(unit=9,file="txtfiles/in_hugo_0.txt",action="read") 
       read(9,*) aux ; ecostinw = int(aux)
       read(9,*) aux ; elasticL = int(aux)
       read(9,*) aux ; withk    = int(aux)
@@ -72,13 +72,13 @@ module hugo
 
     ! baseline economy
     if (withk.eq.1 .and. ecostinw.eq.0) then
-      open(unit=9,file="txtfiles/in_hugo_fixed_base.txt",action="read")
+      open(unit=9,file="txtfiles/in_hugo_base.txt",action="read")
     ! economy with entry cost in labor units
     else if (withk.eq.1 .and. ecostinw.eq.1) then
-      open(unit=9,file="txtfiles/in_hugo_fixed_ew.txt",action="read")
+      open(unit=9,file="txtfiles/in_hugo_ew.txt",action="read")
     ! economy without capital
     else if (withk.eq.0 .and. ecostinw.eq.0) then
-      open(unit=9,file="txtfiles/in_hugo_fixed_nok.txt",action="read")
+      open(unit=9,file="txtfiles/in_hugo_nok.txt",action="read")
     ! bad combination of model settings
     else
       write(*,*) ' Error: combination of parameters not implemented '
