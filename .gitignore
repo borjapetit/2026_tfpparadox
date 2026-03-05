@@ -1,0 +1,9 @@
+model
+test
+compiledfiles/*.*
+results/*.*
+tmp_build
+tmp_build/*.*
+tmp_mod
+tmp_mod/*.*
+

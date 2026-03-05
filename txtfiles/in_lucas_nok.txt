@@ -1,0 +1,66 @@
+0.06513030 ! rrate
+2.50468278 ! xi
+1.00000000 ! uz
+0.47427659 ! sigma
+0.62439406 ! gamma
+                      
+  parameters:         
+  ----------          
+  0.00000000 ! withk
+  0.06513030 ! rrate
+  2.50468278 ! xi
+  1.00000000 ! uz
+  0.47427659 ! sigma
+  0.62439406 ! gamma
+  
+  
+  Equilibrium:     
+  ^^^^^^^^^^^^^    
+  Wage rate            1.344966
+  Share managers       6.486165
+  
+  Productivity:    
+  ^^^^^^^^^^^^^    
+  Z                  111.205801   -0.000000
+  TFP                  2.100454    0.000000
+  TFP as in Guner      Infinity    Infinity
+  TFP as in Solow      Infinity    Infinity
+  Output per worker    2.154034
+  
+  Distortions: 
+  ^^^^^^^^^^^^ 
+  Average          0.000000
+  Small firms      0.000000
+  Large firms      0.000000
+  
+  Aggregates: 
+  ^^^^^^^^^^^ 
+  Output          2.014319
+  Capital         0.000000    0.000000
+  Labor           0.935138
+  Consumption     2.014319
+  Government      0.226977
+  
+  Labor sh.       0.624394
+  Capital sh.     0.262924
+  
+  
+  *****************************************
+  MOMENTS             Model    Data    Diff 
+  *****************************************
+  Labor: average      14.42   14.37    0.00
+  Labor: std logs      0.99    1.17   -0.15
+  -----------------------------------------
+  Labor: p10           2.66    1.00    1.66
+  Labor: p25           3.22    2.00    0.61
+  Labor: p50           4.96    3.63    0.37
+  Labor: p75          10.36    8.11    0.28
+  Labor: p90          27.46   19.63    0.40
+  -----------------------------------------
+  Share firms n>50     5.69    3.26    0.75
+  Labor in n>50       48.26   54.83   -0.12
+  -----------------------------------------
+  Capital: average     0.00    4.98   -1.00
+  *****************************************
+  
+  

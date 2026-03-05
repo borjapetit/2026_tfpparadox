@@ -1,0 +1,70 @@
+0.06333904 ! rrate
+0.02000000 ! eprob
+0.21279047 ! fcost
+14.77805600 ! ecost
+2.14454587 ! xi
+1.01886086 ! uz
+0.92000000 ! rhoz
+0.10112291 ! stdz
+-0.36858787 ! muz0
+0.13971668 ! stdz0
+0.30000000 ! alpha
+0.63299282 ! gamma
+1.00000000 ! eta0
+2.00000000 ! eta1
+
+!!!!!!!!!!! checked
+
+Equilibrium:     
+^^^^^^^^^^^^^    
+Wage rate            0.179499
+Mass of entrants     0.043166    6.059651
+
+Productivity:    
+^^^^^^^^^^^^^    
+Z                    1.099878    0.000000
+TFP                  0.326784    0.000000
+TFP as in Guner      0.390423   19.474537
+TFP as in Solow      0.363542   11.248647
+Output per worker    0.372791
+
+Distortions: 
+^^^^^^^^^^^^ 
+Average          0.000000
+Small firms      0.000000
+Large firms      0.000000
+
+Aggregates: 
+^^^^^^^^^^^ 
+Output          0.249465
+Capital         0.747926    2.998117
+Labor           0.669182    0.658973
+Consumption     0.202488
+Government      0.027467
+Labor sh.       0.480738
+Capital sh.     0.409334
+Exit rate       7.938023
+
+
+*****************************************
+MOMENTS             Model    Data    Diff 
+*****************************************
+Labor: average      14.27   14.37   -0.01
+Labor: std logs      1.25    1.17    0.07
+Labor: persisten     0.97    0.96    0.00
+Labor: p10           1.01    1.00    0.01
+Labor: p25           1.92    2.00   -0.04
+Labor: p50           3.90    3.63    0.08
+Labor: p75           8.77    8.11    0.08
+Labor: p90          20.59   19.63    0.05
+-----------------------------------------
+E Labor: average     5.23    5.12    0.02
+E Labor: p10         0.97    1.00   -0.03
+E Labor: p25         1.22    1.25   -0.02
+E Labor: p50         1.75    2.01   -0.13
+E Labor: p75         3.20    4.00   -0.20
+E Labor: p90         7.05    7.25   -0.03
+-----------------------------------------
+Share firms n>50     3.57    3.26    0.10
+Labor in n>50       55.15   54.83    0.01
+*****************************************

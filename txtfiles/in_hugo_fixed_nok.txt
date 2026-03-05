@@ -1,0 +1,65 @@
+0.06348710 ! rrate
+0.02000000 ! eprob
+0.70811658 ! fcost
+11.14672304 ! ecost
+2.42511554 ! xi
+1.00000000 ! uz
+0.91000000 ! rhoz
+0.15665331 ! stdz
+-0.27412732 ! muz0
+0.00013667 ! stdz0
+0.58177973 ! gamma
+1.00000000 ! eta0
+2.00000000 ! eta1
+  
+  
+  
+  Equilibrium:     
+  ^^^^^^^^^^^^^    
+  Wage rate            0.769180
+  Mass of entrants     0.060563    6.569126
+  
+  Productivity:    
+  ^^^^^^^^^^^^^    
+  Z                   27.729920
+  TFP                  1.242128
+  TFP as in Guner      Infinity
+  TFP as in Solow      Infinity
+  Output per worker    1.322116
+  
+  Aggregates: 
+  ^^^^^^^^^^^ 
+  Output          1.138841
+  Capital         0.000000    0.000000
+  Labor           0.861378    0.921941
+  Consumption     1.036671
+  Government      0.142886
+  Labor sh.       0.604545
+  Capital sh.     0.265079
+  Exit rate       7.896069
+  
+  
+  *****************************************
+  MOMENTS             Model    Data    Diff 
+  *****************************************
+  Labor: average      14.22   14.37   -0.01
+  Labor: std logs      1.35    1.17    0.15
+  Labor: persisten     0.96    0.96   -0.00
+  Labor: p10           0.80    1.00   -0.20
+  Labor: p25           1.53    2.00   -0.24
+  Labor: p50           3.37    3.63   -0.07
+  Labor: p75           8.50    8.11    0.05
+  Labor: p90          22.55   19.63    0.15
+  -----------------------------------------
+  E Labor: average     5.59    5.12    0.09
+  E Labor: p10         0.96    1.00   -0.04
+  E Labor: p25         1.15    1.25   -0.08
+  E Labor: p50         1.71    2.01   -0.15
+  E Labor: p75         3.41    4.00   -0.15
+  E Labor: p90         8.38    7.25    0.16
+  -----------------------------------------
+  Share firms n>50     4.48    3.26    0.37
+  Labor in n>50       57.92   54.83    0.06
+  *****************************************
+  
+  
