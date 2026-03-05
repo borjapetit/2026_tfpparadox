@@ -1,6 +1,6 @@
 <br>**Replication codes**
 
-**Productivity Paradox of Size-Dependent Distortions**<br>
+**Firm Entry and the TFP Paradox of Productivity-Dependent Distortions**<br>
 Borja Petit, Miguel Almunia, Juan F. Jimeno, and David López-Rodríguez.<br>
 
 To use the codes, you need to download the full repository, keeping the **same folder structure**.<br>
