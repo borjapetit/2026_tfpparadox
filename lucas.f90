@@ -1,443 +1,401 @@
+
+! ======================================================================================================
+! Lucas (1978) economy: occupational choice with Pareto-distributed managerial ability
+!
+! Calibration: gamma -> average firm size, xi -> share of employment in firms with 50+ workers,
+! rrate -> capital-to-output ratio (taken from the baseline calibration when withk = 0)
+!
+! Files (names built in parameters.f90 from the economy chosen in the menu, e.g. lucas_tau30):
+!   parameters:   txtfiles/calib_<economy>_<version>.txt
+!   calibration:  results/<date>_calib_<economy>_<version>.txt
+!   solution:     results/<date>_solve_<economy>_<version>.txt
+!   experiments:  results/<economy>_<version>.txt and results/<economy>_<sensitivity exercise>.txt
+! ======================================================================================================
+
 module lucas
 
   use parameters
+  use omp_lib
   use toolkit , only : lmmin,simplex,vect,varmean,varstd,percentile,grid,interpolate,&
-  correlation,print_err,bisection,brent,olsreg,num2text
+  correlation,print_err,bisection,brent,olsreg,num2text,tauchen,error
   
   implicit none
 
   ! state space
-  integer  , parameter     :: nz = 5000
-  integer                  :: fixedN
+  integer  , parameter :: nz = 20000
+
+  ! productivity grid
   real(rp) , dimension(nz) :: zgrid
   real(rp) , dimension(nz) :: pz
+
+  ! distribution of firms
   real(rp) , dimension(nz) :: Gz
-  real(rp)                 :: taus,taul,zphi
+  real(rp) , dimension(nz) :: Gze
 
-  ! ------------------------------------------------------------
-  ! model parameters
-  ! ------------------------------------------------------------ 
-
-  real(rp) :: minermodel,bestx(4)
-  real(rp) :: condi
-  integer  :: withk
-  ! equilibrium objects: wage, mass of firms, mass of entrants, totallabor supply
-  real(rp) :: wage,M,Lbar,zhat
-  ! caPtal cost
-  real(rp) :: rrate
-  ! technology
-  real(rp) :: gamma,eprob
-  ! productivity distribution
-  real(rp) :: xi,uz,sigma
-  ! distortions: level and curvature
-  real(rp) :: atau,phi1,phi0
-  ! aggregates
-  real(rp) :: aK,aN,aL,aY,aC,aP,aT,aZ,aTFP,nTFP,mTFP,eZ,eTFP  ! distorted economy
   ! value and policy function
-  real(rp) , dimension(nz) :: vfunc,vgues,pol_k,pol_n,pol_y,pol_pi,pol_e,pol_t,pol_tau 
+  real(rp) , dimension(nz) :: vfunc
+  real(rp) , dimension(nz) :: vgues
+  real(rp) , dimension(nz) :: pol_k
+  real(rp) , dimension(nz) :: pol_n
+  real(rp) , dimension(nz) :: pol_y
+  real(rp) , dimension(nz) :: pol_pi
+  real(rp) , dimension(nz) :: pol_e
+  real(rp) , dimension(nz) :: pol_t
+  real(rp) , dimension(nz) :: pol_tau 
+
+  real(rp) :: bestx(4)
+  real(rp) :: wprev = one   ! wage of the last equilibrium solved (initial guess for findroot)
+
+  type(results) :: base
+  type(results) :: eff
+  type(results) :: distort
+  
 
   contains
 
   subroutine solve_lucas( mode )
+    !
     implicit none
+    !
     integer , intent(in) :: mode
-    real(rp) :: aux,vecr(14),vecr0(14)
-    integer  :: ia,iy,ind,ifile,modsol
-    real(rp) :: M0,dist0(nz),distort0(nz),wage0,aK0,TFP0,par0
-    character(len=100) :: filename
+    integer              :: ifile
+    real(rp)             :: par0
 
-    modsol = mode
-
-    ! load model settings
-    open(unit=9,file="txtfiles/in_lucas_0.txt",action="read") 
-      read(9,*) aux ; withk = int(aux)
-    close(9)
-
-    85 continue
-
-    ! baseline economy
-    if (withk.eq.1) then
-      open(unit=9,file="txtfiles/in_lucas_base.txt",action="read")
-    ! economy without capital
-    else if (withk.eq.0) then
-      open(unit=9,file="txtfiles/in_lucas_nok.txt",action="read")
-    ! bad combination of model settings
-    else
-      write(*,*) ' Error: combination of parameters not implemented '
-      read * , aux
-    end if
-
-    ! read parameters of the model
-    read(9,*) rrate
-    read(9,*) xi
-    read(9,*) uz
-    read(9,*) sigma
-    read(9,*) gamma
-    close(9)
-
+    ! --------------------------------------------------------------
     ! initialize some parameter values
-    atau = zero ; phi0 = zero ; phi1 = zero
 
-    if (modsol.eq.1) then
-      
-      call equilibrium( )
-      call writelucas(1)
-      call writelucas( )
+    atau = zero ; ifile = 878 ; minermodel = huge(one)
 
-    elseif (modsol.eq.2) then
+    ! --------------------------------------------------------------
+    ! options (menu of main.f90):
+    !    1  solve the baseline model                 2  calibrate the baseline model
+    !    3  symmetric experiment (baseline)          4  sensitivity of the symmetric experiment
+    !    5  solve the model without capital          6  calibrate the model without capital
+    ! Each version reads its parameters from txtfiles/calib_<economy>_<version>.txt (see setversion).
+    ! When the model without capital is calibrated, the interest rate is taken from the baseline file
+    ! of the same economy.
 
-      print_err = .false. ; ifile = 878
+    if (mode.ne.1 .and. mode.ne.5) print_err = .false.
 
-      write(*,'(/,a,/)') ' Revenue neutral distortions'
-      filename = "base" ; call runexperiment( )
-
-      print_err = .true.
-
-    elseif (modsol.eq.3) then
-    
-      print_err  = .false.
-      minermodel = huge(one)
-
-      call calibmodel( )
-      call writelucas( )
-
-      print_err = .true.
-
-    elseif (modsol.eq.4) then
-
-      print_err = .false. ; ifile = 878
-
-      write(*,'(/,a,/)') ' Baseline'
-      filename = "s_base" ; call runexperiment( )
-
+    select case (mode)
+    case (1) ; call setversion(1) ; call equilibrium( ) ; call writelucas(1)
+    case (2) ; call setversion(1) ; call calibmodel( )  ; call writelucas(1)
+    case (3) ; call setversion(1) ; call runexperiment( )
+    case (4)
+      call setversion(1)
       write(*,'(/,a,/)') ' Higher gamma'
-      par0 = gamma ; gamma = par0*1.05d0
-      filename = "s_gamma_1" ; call runexperiment( )
-      gamma = par0
-
+      par0 = gamma ; gamma = par0*1.05_rp ; call runexperiment("gamma_up5") ; gamma = par0
       write(*,'(/,a,/)') ' Lower gamma'
-      par0 = gamma ; gamma = par0*0.95d0
-      filename = "s_gamma_0" ; call runexperiment( )
-      gamma = par0
-
+      par0 = gamma ; gamma = par0*0.95_rp ; call runexperiment("gamma_down5") ; gamma = par0
       write(*,'(/,a,/)') ' Higher xi'
-      par0 = xi ; xi = par0*1.10d0
-      filename = "s_xi_1" ; call runexperiment( )
-      xi = par0
-
+      par0 = xi ; xi = par0*1.10_rp ; call runexperiment("xi_up10") ; xi = par0
       write(*,'(/,a,/)') ' Lower xi'
-      par0 = xi ; xi = par0*0.90d0
-      filename = "s_xi_0" ; call runexperiment( )
-      xi = par0
+      par0 = xi ; xi = par0*0.90_rp ; call runexperiment("xi_down10") ; xi = par0
+      write(*,'(/,a,/)') ' No capital'
+      call setversion(2) ; call runexperiment( )
+    case (5) ; call setversion(2) ; call equilibrium( ) ; call writelucas(1)
+    case (6) ; call setversion(2) ; rrate = baserate( ) ; call calibmodel( ) ; call writelucas(1)
+    case default
+      write(*,'(a)') ' invalid option for this model'
+    end select
 
-      print_err = .true.
-    
-    end if
+    print_err = .true.
 
-    if (modsol.eq.2) then
-      if (withk.eq.1) then
-        withk = 0
-        goto 85
-      else if (withk.eq.0) then
-        withk  = 1
-        modsol = 4
-        goto 85
-      end if
-    end if
-    
     return
+    
     contains
-    ! this subroutine runs each experiment
-    subroutine runexperiment( )
+
+    ! this subroutine runs the symmetric experiment. Results: results/<economy>_<exercise>.txt, where
+    ! the exercise is the version of the model (baseline, nocapital) or, if given, the name of the
+    ! sensitivity exercise
+    subroutine runexperiment(exercise)
       implicit none
-      character (len=100) :: ecotype
-      real(rp)            :: tfpp
-
-      ! initialize the economy
-      atau = zero ; taus = zero ; taul = zero
-
-      if (withk.eq.1) then
-        ecotype = 'base'
-      else if (withk.eq.0) then
-        ecotype = 'nok'
-      end if
+      character (len=*) , intent(in) , optional :: exercise
 
       ! setup file for storing results
-      open(unit=ifile,file="results/l_"//trim(adjustl(ecotype))//"_"//&
-      trim(adjustl(filename))//".txt",action='write',status="replace")
+      if (present(exercise)) then
+        open(unit=ifile,file=expfile(exercise),action='write',status="replace")
+        write(*,'(a)') ' results: '//trim(expfile(exercise))
+      else
+        open(unit=ifile,file=expfile(vname),action='write',status="replace")
+        write(*,'(a)') ' results: '//trim(expfile(vname))
+      end if
 
-      ! undistorted economy
-      call equilibrium( ) ; call printexer(1) ; tfpp = aggTFP(M,pol_tau,Gz)
+      ! initialize the economy
+      atau = zero ; print * , '   '
+
+      ! baseline economy
+      tau = taubase ; call equilibrium(base)
+
+      ! efficient allocation
+      tau = 0.0_rp ; call equilibrium(eff) 
+
+      ! print initial results
+      call printexer(ifile,base,eff) ; call printexer(0,base,eff)
+      call printexer(ifile,base)     ; call printexer(0,base)
 
       ! distorted economies
-      do ia = 1,20 ; atau = dble(ia)/cien
-        call bisection(findzphi,zphi,iy,ind,maxval(zgrid),minval(zgrid),iprint=0)
-        condi = findzphi(zphi) ; call printexer( ) ; tfpp = aggTFP(M,pol_tau,Gz)
-      end do
-
-      ! if tfp increases with 20% distortion, keep increasing it until TFP falls
-      if (tfpp/TFP0.gt.0.95d0) then
-        84 atau = atau + 0.01d0
-        call bisection(findzphi,zphi,iy,ind,maxval(zgrid),minval(zgrid),iprint=0)
-        condi = findzphi(zphi) ; call printexer(0) ; tfpp = aggTFP(M,pol_tau,Gz)
-        if (tfpp/TFP0.gt.0.95d0 .and. atau.lt.0.5d0) goto 84
-      end if
+      tau = taubase ; atau = zero ; exper : do ; atau = atau + 0.01_rp
+        call equilibrium(distort) ; call printexer(ifile,base,distort) ; call printexer(0,base,distort)
+        if (atau.gt.0.20 .and. distort%TFP0/base%TFP0.lt.0.95_rp) exit exper
+        if (atau.gt.0.50) exit exper
+      end do exper
 
       close(ifile)
       
       return
     end subroutine runexperiment
-    ! this subroutine prints the results of each experiment
-    subroutine printexer(indic)
-      implicit none
-      integer , optional , intent(in) :: indic
-      real(rp) :: Expz,Etau,Etau0,Etaulow,Etauhigh
-      real(rp) :: T000,T100,T010,T001,T110,T101,T011,T111
-      real(rp) :: dM,dphi,dF,dwage
 
-      Expz     = sum( exp(zgrid)*Gz )/sum( Gz )
-      Etau     = sum( pol_y*pol_tau*Gz                             )/sum( pol_y*Gz                             )
-      Etau0    = sum( pol_y*pol_tau*Gz                             )/sum( pol_y*Gz                             )
-      Etaulow  = sum( pol_y*pol_tau*Gz , mask=pol_n.lt.s_lab%p10%m )/sum( pol_y*Gz , mask=pol_n.lt.s_lab%p10%m )
-      Etauhigh = sum( pol_y*pol_tau*Gz , mask=pol_n.gt.s_lab%p90%m )/sum( pol_y*Gz , mask=pol_n.gt.s_lab%p90%m )
-      
-      vecr  = (/ Etau,Etau0,Etaulow,Etauhigh,Expz,M,aY,aN,aN+M,aK,aY/aN,aC,mTFP,nTFP /)
-
-      if (present(indic) .and. indic.eq.1) then  
-        M0       = M
-        dist0    = Gz
-        distort0 = zero
-        aK0      = aK
-        wage0    = wage
-        vecr0    = vecr
-        TFP0     = aggTFP(M,pol_tau,Gz)
-        write(ifile,'(a1,30(f9.3))') 'X',atau*cien,wage,TFP0,TFP0,zero,zero,zero,zero,vecr,condi,zphi 
-        write(ifile,'(50(a9))') 'atau','wage','TFP0','TFP1','DTFP','DM','DPhi','DF',&
-          'Etau','Etau0','Etaul','Etauh','Expz','M','aY','aN','aL','aK','YN','aC','mTFP','nTFP','check','zphi'
-        write(*,'(50(a9))') 'atau','wage','TFP0','TFP1','DTFP','DM','DPhi','DF',&
-          'Etau','Etau0','Etaul','Etauh','Expz','M','aY','aN','aL','aK','YN','aC','mTFP','nTFP','check','zphi'
-      end if
-      
-      dwage      = cien*( wage/wage0             - one )
-      vecr(5:14) = cien*( vecr(5:14)/vecr0(5:14) - one )
-
-      T000 = aggTFP( M0 , distort0 , dist0 )
-      T100 = aggTFP( M  , distort0 , dist0 )
-      T010 = aggTFP( M0 , pol_tau  , dist0 )
-      T001 = aggTFP( M0 , distort0 , Gz    )
-      T110 = aggTFP( M  , pol_tau  , dist0 )
-      T101 = aggTFP( M  , distort0 , Gz    )
-      T011 = aggTFP( M0 , pol_tau  , Gz    )
-      T111 = aggTFP( M  , pol_tau  , Gz    )
-
-      dM   = (1.d0/3.d0)*(T100 - T000) + (1.d0/6.d0)*((T110 - T010) + (T101 - T001)) + (1.d0/3.d0)*(T111 - T011)
-      dphi = (1.d0/3.d0)*(T010 - T000) + (1.d0/6.d0)*((T110 - T100) + (T011 - T001)) + (1.d0/3.d0)*(T111 - T101)
-      dF   = (1.d0/3.d0)*(T001 - T000) + (1.d0/6.d0)*((T101 - T100) + (T011 - T010)) + (1.d0/3.d0)*(T111 - T110)
-
-      write(ifile,'(30(f9.3))') atau*cien,dwage,T000,T111,cien*(T111-T000)/T000,cien*dM/T000,cien*dphi/T000,cien*dF/T000,&
-        vecr,condi,zphi
-      write(*,'(30(f9.3))') atau*cien,dwage,T000,T111,cien*(T111-T000)/T000,cien*dM/T000,cien*dphi/T000,cien*dF/T000,&
-        vecr,condi,zphi
-
-      return
-    end subroutine printexer
-    ! this function computes TFP given mass of firms, distortions and distribution of firms
-    function aggTFP(mass,distort,dist) result (agtfp)
-      implicit none
-      real(rp) :: mass,distort(:),dist(:),agtfp
-        agtfp = ( mass**(one-gamma) )* &
-                 ( varmean( (((one - distort)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = dist )) / &
-                 ( varmean( (((one - distort)       )*exp(zgrid))**(one/(one-gamma)) , w = dist )**gamma )
-      return
-    end function aggTFP
-    ! this function is used to find the threshold productivity for each experiment
-    function findzphi(xp) result(resid)
-      implicit none
-      real(rp) :: xp
-      real(rp) :: resid
-      zphi = xp ; taul = atau ; taus = -atau ; call equilibrium( )
-      resid = sum(pol_tau*pol_y*Gz)*cien
-      return
-    end function findzphi
-    ! this function is used to find the level of distortion that makes TFP equal to the baseline
-    function findatau0(xp) result(resid)
-      implicit none
-      real(rp) :: xp
-      real(rp) :: resid,tfpa0,tfpa1
-      atau = xp
-      call bisection(findzphi,zphi,iy,ind,maxval(zgrid),minval(zgrid),iprint=0)
-      tfpa0 = aggTFP( M0 , distort0 , dist0 )
-      tfpa1 = aggTFP( M , pol_tau , Gz )
-      resid = cien*( one - tfpa1/tfpa0 )
-      return
-    end function findatau0
+    !
   end subroutine solve_lucas
 
-! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! solve the model given some equilibrium prices (wage and mass of entrants)
+  ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! version of the model: 1 baseline, 2 no capital.
+  ! Sets withk and vname, and reads the parameters from txtfiles/calib_<economy>_<version>.txt
 
-  subroutine equilibrium( )
-    use omp_lib
-    use toolkit , only : grid,tauchen,olsreg,varmean,varstd,percentile,vect,interpolate
+  subroutine setversion(iv)
     implicit none
-    real(rp) :: maxw,minw,equilw
-    real(rp) :: lshare,zaux1,zaux2
+    integer , intent(in) :: iv
+    logical              :: exists
+    withk = 1 ; vname = "baseline"
+    if (iv.eq.2) then ; withk = 0 ; vname = "nocapital" ; end if
+    inquire(file=infile(vname),exist=exists)
+    if (.not.exists) then
+      write(*,'(a)') ' parameter file not found: '//trim(infile(vname)) ; stop
+    end if
+    open(unit=9,file=infile(vname),action="read")
+      read(9,*) rrate
+      read(9,*) xi
+      read(9,*) uz
+      read(9,*) gamma
+    close(9)
+    atau = zero
+    return
+  end subroutine setversion
+
+  ! interest rate of the baseline model (used to calibrate the model without capital)
+  function baserate() result(r)
+    implicit none
+    real(rp) :: r
+    open(unit=9,file=infile("baseline"),action="read")
+      read(9,*) r
+    close(9)
+    return
+  end function baserate
+
+  ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! solve the model given some equilibrium prices (wage and mass of entrants)
+
+  subroutine equilibrium(res)
+    implicit none
+    type(results) , intent(out) , optional :: res
+    real(rp)                               :: maxw
+    real(rp)                               :: minw
+    real(rp)                               :: equilw
+    real(rp)                               :: maxz
+    real(rp)                               :: minz
+    real(rp)                               :: equilz
+    integer                                :: iterz
+
+    iterz = 0 ; minz = zero ; maxz = zero ; equilz = zero ; wcondi = 99.9_rp
 
     ! ------------------------------------------------------------
     ! distribution over permanent productivity
-    call pareto(zgrid,pz,uz,xi,uz/xi,nz)
+
+    call pareto( zgrid , pz , uz , xi , uz/xi , nz )
+
+    ! ------------------------------------------------------------
+    ! find the cutoff productivity for distortions
+
+    if (abs(atau).gt.tol) then
+      minz   = minval(zgrid)
+      maxz   = maxval(zgrid)
+      equilz = huge(one)
+    else
+      minz   = maxval(zgrid) 
+      maxz   = maxval(zgrid)
+      equilz = zero
+    end if
+
+    10 continue
 
     ! ------------------------------------------------------------
     ! distortions
 
-    if (abs(taus)+abs(taul).lt.tol) then
-      pol_tau = one - exp( phi0 + phi1*(zgrid(nz)-zgrid) )
+    if (abs(atau).gt.tol) then
+      iterz = iterz + 1
+      zphi  = half*( maxz + minz )
+      where (zgrid.gt.zphi) pol_tau =   atau
+      where (zgrid.le.zphi) pol_tau = - atau 
     else
-      where (zgrid.gt.zphi) pol_tau = taul
-      where (zgrid.le.zphi) pol_tau = taus
+      pol_tau = zero 
     end if
 
     ! ------------------------------------------------------------
     ! find the equilibrium wage
 
-    maxw = 3000.0d0 ; minw = 0.0d0 ; equilw = huge(one)
-    do while (abs(maxw-minw)*10.0d0.gt.tol .and. abs(equilw)*10.0d0.gt.tol)
+    ! Brent's method, starting from the wage of the previous equilibrium (wprev)
+    call findroot(wres_lucas,wprev,1.0e5_rp,wage,equilw,tol/cien,tol/cien)
+    wprev = wage
 
-      ! set the wage rate 
-      wage  = 0.5d0*(maxw + minw)
-
-      ! policy functions
-      pol_n  = nstar(zgrid,pol_tau)
-      pol_k  = kstar(zgrid,pol_tau)
-      pol_y  = output(zgrid,pol_k,pol_n,pol_tau)
-      pol_pi = (one-pol_tau)*pol_y - wage*pol_n - rrate*pol_k
-      pol_t  = tau*pol_pi + pol_tau*pol_y
-      pol_pi = (one-tau)*pol_pi
-
-      ! mass of firms and equilibrium
-      Gz = zero ; where (pol_pi.gt.wage) Gz = pz
-      M  = sum(Gz)
-      aL = one - M
-
-      ! labor market clearing condition
-      equilw = sum(pol_n*Gz) - aL
-
-      ! update wage rate
-      if (equilw.lt.zero) then
-        maxw = 0.5d0*(wage+maxw)
-      else
-        minw = 0.5d0*(wage+minw)
-      end if
-
-    end do
+    wcondi = equilw
 
     ! ------------------------------------------------------------
-    ! find the equilibrium mass of firms
+    ! update distortions
 
-    M  = sum(Gz)
-    aL = one - M
+    if (abs(atau).gt.tol) then
+      equilz = sum(pol_tau*pol_y*Gz)*cien/sum(Gz)
+      if (iterz.lt.1000 .and. abs(maxz-minz).gt.tol .and. abs(equilz).gt.tol) then
+        if (equilz.gt.zero) minz = zphi
+        if (equilz.lt.zero) maxz = zphi
+        goto 10
+      end if
+    end if
+
+    ! ------------------------------------------------------------
+    ! equilibrium objects
+
+    M  = sum(Gz)                ! mass of firms
+    pol_e = zero                ! no exit in the static economy
+    Me = M                      ! mass of entrants
+    aK = sum(Gz*pol_k)          ! aggregate capital
+    aN = sum(Gz*pol_n)          ! aggregate labor in production
+    aL = aN                     ! aggregate labor supply
+    aP = sum(Gz*pol_pi)         ! aggregate profits
+    aT = sum(Gz*pol_t)          ! aggregate tax revenues
+    aY = sum(Gz*pol_y)          ! aggregate output
+    aC = wage*aN + aP + aT      ! aggregate consumption
+
+    ! aggregate TFP
+    aZ1 = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
+    aZ2 = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
+    TFP0  = ( M**(one-gamma) )*aZ1/aZ2
+    aZ    = ( TFP0 / ( M**(one-gamma) )  )**(one/(one-gamma))
+    
+    ! TFP as in Guner et al
+    TFP1 = aY / ( ( aK**(gamma*alpha) ) * ( aL**(one-(gamma*alpha)) ) )
+
+    ! measured TFP as an econometrician
+    TFP2 = aY / ( ( aK**(one-(wage*aL/aY)) ) * ( aL**(wage*aL/aY) ) )
+
+    ! TFP using total population
+    TFP3 = aY / ( ( (aK**alpha) * ( (aL+M)**(one-alpha) ) ) ** gamma )
+
+    ! ------------------------------------------------------------
+    ! store results
+
+    if (present(res)) then
+
+      res%wage = wage
+      res%M    = M
+      res%Me   = M
+      res%aK   = aK
+      res%aN   = aN
+      res%aL   = aL
+      res%aY   = aY
+      res%aC   = aC
+      res%aP   = aP
+      res%aT   = aT
+      res%aZ   = aZ
+      res%aZ1  = aZ1
+      res%aZ2  = aZ2
+      res%TFP0 = TFP0
+      res%TFP1 = TFP1
+      res%TFP2 = TFP2
+      res%TFP3 = TFP3
+
+      if (allocated(res%k)   ) deallocate(res%k)   ; allocate (res%k(nz))
+      if (allocated(res%n)   ) deallocate(res%n)   ; allocate (res%n(nz))
+      if (allocated(res%y)   ) deallocate(res%y)   ; allocate (res%y(nz))
+      if (allocated(res%pi)  ) deallocate(res%pi)  ; allocate (res%pi(nz))
+      if (allocated(res%e)   ) deallocate(res%e)   ; allocate (res%e(nz))
+      if (allocated(res%t)   ) deallocate(res%t)   ; allocate (res%t(nz))
+      if (allocated(res%tau) ) deallocate(res%tau) ; allocate (res%tau(nz))
+      if (allocated(res%z)   ) deallocate(res%z)   ; allocate (res%z(nz))
+      if (allocated(res%G)   ) deallocate(res%G)   ; allocate (res%G(nz))
+      if (allocated(res%Ge)  ) deallocate(res%Ge)  ; allocate (res%Ge(nz))
+
+      if (allocated(res%large) ) deallocate(res%large) ; allocate (res%large(nz))
+      if (allocated(res%small) ) deallocate(res%small) ; allocate (res%small(nz))
+      if (allocated(res%taxed) ) deallocate(res%taxed) ; allocate (res%taxed(nz))
+
+      res%k   = pol_k
+      res%n   = pol_n
+      res%y   = pol_y
+      res%pi  = pol_pi
+      res%e   = pol_e
+      res%t   = pol_t
+      res%tau = pol_tau
+      res%z   = zgrid
+      res%G   = Gz
+      res%Ge  = Gz
+
+      res%small = ( vect(pol_n).lt.percentile(vect(pol_n),0.10_rp,w=vect(Gz)) )
+      res%large = ( vect(pol_n).gt.percentile(vect(pol_n),0.90_rp,w=vect(Gz)) )
+
+      res%taxed = zero ; where (vect(pol_tau).gt.tol) res%taxed = one
+
+    end if
 
     ! ------------------------------------------------------------
     ! statistics and aggregate variables
 
     s_lab%mean%m = varmean(    pol_n           , w = Gz )
     s_lab%std%m  = varstd(     log(pol_n)      , w = Gz )
-    s_lab%p10%m  = percentile( pol_n  , 0.10d0 , w = Gz )
-    s_lab%p25%m  = percentile( pol_n  , 0.25d0 , w = Gz )
-    s_lab%p50%m  = percentile( pol_n  , 0.50d0 , w = Gz )
-    s_lab%p75%m  = percentile( pol_n  , 0.75d0 , w = Gz )
-    s_lab%p90%m  = percentile( pol_n  , 0.90d0 , w = Gz )
-    shr_firms%m  = cien*sum(Gz      ,mask=pol_n.ge.50.d0)/sum(Gz)
-    shr_labor%m  = cien*sum(pol_n*Gz,mask=pol_n.ge.50.d0)/sum(pol_n*Gz)
+    s_lab%p10%m  = percentile( pol_n  , 0.10_rp , w = Gz )
+    s_lab%p25%m  = percentile( pol_n  , 0.25_rp , w = Gz )
+    s_lab%p50%m  = percentile( pol_n  , 0.50_rp , w = Gz )
+    s_lab%p75%m  = percentile( pol_n  , 0.75_rp , w = Gz )
+    s_lab%p90%m  = percentile( pol_n  , 0.90_rp , w = Gz )
 
-    ! ------------------------------------------------------------
-    ! aggregate variables
+    shr_firms%m  = cien*sum(Gz      ,mask=pol_n.ge.50.0_rp)/sum(Gz)
+    shr_labor%m  = cien*sum(pol_n*Gz,mask=pol_n.ge.50.0_rp)/sum(pol_n*Gz)
 
-    M  = sum(Gz)                ! mass of firms
-    aK = sum(Gz*pol_k)          ! aggregate capital
-    aN = sum(Gz*pol_n)          ! aggregate labor
-    aP = sum(Gz*pol_pi)         ! aggregate profits
-    aT = sum(Gz*pol_t)          ! aggregate tax revenues
-    aY = sum(Gz*pol_y)          ! aggregate output
-    aC = wage*aN + aP + aT      ! aggregate consumption
-    aL = aN                     ! aggregate labor supply
-
-    ! aggregate TFP
-    zaux1 = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
-    zaux2 = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
-    aTFP  = ( M**(one-gamma) )*zaux1/zaux2
-    aZ    = ( aTFP / ( M**(one-gamma) )  )**(one/(one-gamma))
+    s_lab0%mean%m = zero
+    s_lab0%std%m  = zero
+    s_lab0%p10%m  = zero
+    s_lab0%p25%m  = zero
+    s_lab0%p50%m  = zero
+    s_lab0%p75%m  = zero
+    s_lab0%p90%m  = zero
     
-    ! efficient TFP – given aggregate inputs and number of firms
-    eZ   = varmean(exp(zgrid/(one-gamma)),w=Gz)
-    eTFP = ( eZ**(one-gamma) )*( M**(one-gamma) ) 
-
-    ! measured TFP as an econometrician
-    lshare = wage*aN/aY
-    mTFP   = aY/( (aK**(one-lshare))*(aN**lshare) )
-
-    ! TFP as in Guner et al
-    nTFP = aY/( (aK**(gamma*alpha))*(aN**(one-(gamma*alpha))) )
+    rho_n%m = zero
 
     return
   end subroutine equilibrium
 
+  ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! excess labor demand at wage w. It also updates policies, occupational choice and the
+  ! distribution of active firms (module variables), used by equilibrium() afterwards.
+
+  function wres_lucas(w) result(f)
+    implicit none
+    real(rp) , intent(in) :: w
+    real(rp)              :: f
+
+    wage = w
+
+    ! policy functions
+    pol_n  = nstar(zgrid,pol_tau,rrate,wage)
+    pol_k  = kstar(zgrid,pol_tau,rrate,wage)
+    pol_y  = output(zgrid,pol_k,pol_n)
+    pol_pi = (one-pol_tau)*pol_y - wage*pol_n - rrate*pol_k
+    pol_t  = tau*pol_pi + pol_tau*pol_y
+    pol_pi = (one-tau)*pol_pi
+
+    ! mass of firms and equilibrium
+    Gz  = zero ; where (pol_pi.gt.wage) Gz = pz
+    Gze = Gz
+    M   = sum(Gz)
+    aN  = one - M
+
+    ! labor market clearing condition
+    f = sum(pol_n*Gz) - aN
+
+    return
+  end function wres_lucas
+
   ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-  elemental function kstar(z,taui) result(k)
-    implicit none
-    real(rp) :: k
-    real(rp) , intent(in) :: taui,z
-    if (withk.eq.1) then
-      k = (((one - taui)*exp(z))**(one/(one-gamma)))*&
-          gamma*(alpha/rrate)*&
-          ((gamma*((alpha/rrate)**alpha)*(((one-alpha)/wage)**(one-alpha)))**(gamma/(one-gamma)))
-    else
-      k = zero
-    end if
-    return
-  end function kstar
-  elemental function nstar(z,taui) result(n)
-    implicit none
-    real(rp) :: n
-    real(rp) , intent(in) :: taui,z
-    if (withk.eq.1) then
-      n = (((one - taui)*exp(z))**(one/(one-gamma)))*&
-          gamma*((one-alpha)/wage)*&
-          ((gamma*((alpha/rrate)**alpha)*(((one-alpha)/wage)**(one-alpha)))**(gamma/(one-gamma)))
-    else
-      n = (((one - taui)*exp(z))**(one/(one-gamma)))*&
-          ((gamma/wage)**(one/(one-gamma)))
-    end if
-    return
-  end function nstar
-  elemental function output(z,k,n,taui) result(y)
-    implicit none
-    real(rp) :: y
-    real(rp) , intent(in) :: z,k,n,taui
-    if (withk.eq.1) then
-      y = (one-taui)*exp(z)*( k**(gamma*alpha) )*( n**(gamma*(one-alpha)) )
-    else
-      y = exp(z)*(n**gamma)
-    end if
-    return
-  end function output
-  elemental function profits(z,taui) result(pi)
-    implicit none
-    real(rp) :: y,k,n,pi
-    real(rp) , intent(in) :: z,taui
-    if (withk.eq.1) then
-      n  = nstar(z,taui)
-      k  = kstar(z,taui)
-      pi = (one-tau)*( (one-taui)*output(z,k,n,taui) - wage*n - rrate*k )
-    else
-      n  = nstar(z,taui)
-      pi = (one-tau)*( (one-taui)*output(z,zero,n,taui) - wage*n )
-    end if
-    return
-  end function profits
-
-! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   subroutine calibmodel( )
     use toolkit , only : simplex,lmmin,normalize,denormalize
@@ -449,46 +407,45 @@ module lucas
     x0 = (/ xi,gamma*xi,rrate /) ; x0 = log(x0)
     do ipp = 0,size(x0)
       if (ipp.gt.0) then
-        call random_number(x1) ; x0 = x0 + 0.1d0*(x1 - 0.5d0)*abs(x0)
+        call random_number(x1) ; x0 = x0 + 0.1_rp*(x1 - 0.5_rp)*abs(x0)
       end if
-      if (withk.eq.0) then
-        call lmmin(funcmodel,x1(1:size(x0)-1),y1(1:size(x0)-1),numiter,exitcode,x0(1:size(x0)-1),iprint=2) 
-        !call simplex(sumfuncmodel,x1(1:size(x0)-1),toty,numiter,exitcode,x0(1:size(x0)-1),iprint=2)
-      else
-        call lmmin(funcmodel,x1,y1,numiter,exitcode,x0,usebro=0,iprint=2) ; x0 = x1
-        call simplex(sumfuncmodel,x1,toty,numiter,exitcode,x0,iprint=2)
-      end if
+      call lmmin(funcmodel,x1,y1,numiter,exitcode,x0,usebro=0,iprint=2) ; x0 = x1
+      call simplex(sumfuncmodel,x1,toty,numiter,exitcode,x0,iprint=2)
       x0 = x1
     end do
     do ipp = 1,500
       call random_number(x1)
-      x0   = bestx(1:size(x0)) + 0.1d0*(x1 - 0.5d0)*abs(bestx(1:size(x0)))
+      x0   = bestx(1:size(x0)) + 0.1_rp*(x1 - 0.5_rp)*abs(bestx(1:size(x0)))
       toty = sumfuncmodel(x0)
       print * , ipp , toty , minermodel
     end do
     return
   end subroutine calibmodel
+
   function funcmodel(xp) result(resid)
     use toolkit , only : denormalize
     implicit none
     real(rp)               :: xp(:)
-    real(rp) , allocatable :: resid(:) ; allocate(resid(size(xp)+0))
+    real(rp) , allocatable :: resid(:) ; allocate(resid(size(xp))) ; resid = zero
 
-    if (size(xp).le.3) xi    = exp(xp(1))
-    if (size(xp).le.3) gamma = exp(xp(2))/xi
-    if (size(xp).eq.3) rrate = min(0.10d0,exp(xp(3)))
+    xi    = exp(xp(1))
+    gamma = exp(xp(2))/xi
+    
+    if (withk.eq.1) rrate = gamma*alpha/3.0_rp
 
     call equilibrium( )
 
-    if (size(xp).le.3) resid(1) = 5.0d0*( one - s_lab%mean%m / s_lab%mean%d )
-    if (size(xp).le.3) resid(2) = 1.0d0*( one - shr_labor%m  / shr_labor%d  ) !
-    if (size(xp).eq.3) resid(3) = 1.0d0*( one - (aK/aY) / 3.0d0 )
+    !if (size(xp).le.3)
+    resid(1) = 5.0_rp*( one - s_lab%mean%m / s_lab%mean%d )
+    !if (size(xp).le.3) 
+    resid(2) = 1.0_rp*( one - shr_labor%m  / shr_labor%d  ) !
+    !if (size(xp).eq.3) resid(3) = 1.0_rp*( one - (aK/aY) / 3.0_rp )
 
-    !if (size(xp).le.3) resid(2) = 1.0d0*( one - (s_lab%p10%m/s_lab%mean%m) / (s_lab%p10%d/s_lab%mean%d)  )
-    !if (size(xp).le.3) resid(3) = 1.0d0*( one - (s_lab%p25%m/s_lab%mean%m) / (s_lab%p25%d/s_lab%mean%d)  )
-    !if (size(xp).le.3) resid(4) = 1.0d0*( one - (s_lab%p50%m/s_lab%mean%m) / (s_lab%p50%d/s_lab%mean%d)  )
-    !if (size(xp).le.3) resid(5) = 1.0d0*( one - (s_lab%p75%m/s_lab%mean%m) / (s_lab%p75%d/s_lab%mean%d)  )
-    !if (size(xp).le.3) resid(6) = 1.0d0*( one - (s_lab%p90%m/s_lab%mean%m) / (s_lab%p90%d/s_lab%mean%d)  )
+    !if (size(xp).le.3) resid(2) = 1.0_rp*( one - (s_lab%p10%m/s_lab%mean%m) / (s_lab%p10%d/s_lab%mean%d)  )
+    !if (size(xp).le.3) resid(3) = 1.0_rp*( one - (s_lab%p25%m/s_lab%mean%m) / (s_lab%p25%d/s_lab%mean%d)  )
+    !if (size(xp).le.3) resid(4) = 1.0_rp*( one - (s_lab%p50%m/s_lab%mean%m) / (s_lab%p50%d/s_lab%mean%d)  )
+    !if (size(xp).le.3) resid(5) = 1.0_rp*( one - (s_lab%p75%m/s_lab%mean%m) / (s_lab%p75%d/s_lab%mean%d)  )
+    !if (size(xp).le.3) resid(6) = 1.0_rp*( one - (s_lab%p90%m/s_lab%mean%m) / (s_lab%p90%d/s_lab%mean%d)  )
 
     if (sum(resid(:)*resid(:)).lt.minermodel) then
       minermodel = sum(resid(:)*resid(:))
@@ -513,76 +470,74 @@ module lucas
     use toolkit , only : varmean,percentile,vect
     implicit none
     integer , intent(in) , optional :: unitnum
-    character(len=100)              :: filename
-    integer                         :: i,unitt ; unitt = 0
-    filename="results/"//date(3:4)//'-'//date(5:6)//'-'//date(7:8)//'_'//time(1:2)//'-'//time(3:4)
+    integer                         :: unitt ; unitt = 0
+    !
     if (present(unitnum)) unitt = unitnum
-    if (unitt.eq.1) open(unit=unitt,file=trim(adjustl(filename))//"_lucas.txt",action='write',status="replace")
-    if (unitt.eq.2) open(unit=unitt,file=trim(adjustl(filename))//"_lucas_calib.txt",action='write',status="replace")
-    if (unitt.eq.3) open(unit=unitt,file=trim(adjustl(filename))//"_lucas_calib_0.txt",action='write',status="replace")
-      write(unitt,90) '                      '
-      write(unitt,90) '  parameters:         '
-      write(unitt,90) '  ----------          '
-      write(unitt,33) dble(withk),'withk'
-      write(unitt,33) rrate,'rrate'
-      write(unitt,33) xi,'xi'
-      write(unitt,33) uz,'uz'
-      write(unitt,33) sigma,'sigma'
-      write(unitt,33) gamma,'gamma'
-      write(unitt,90) '  '
-      write(unitt,90) '  '
-      write(unitt,90) '  ' , 'Equilibrium:     '
-      write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
-      write(unitt,20) '  ' , 'Wage rate        ' , wage
-      write(unitt,20) '  ' , 'Share managers   ' , M*cien
-      write(unitt,90) '  '
-      write(unitt,90) '  ' , 'Productivity:    '
-      write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
-      write(unitt,20) '  ' , 'Z                ' , aZ   , cien*aZ/eZ - cien
-      write(unitt,20) '  ' , 'TFP              ' , aTFP , cien*aTFP/eTFP - cien
-      write(unitt,20) '  ' , 'TFP as in Guner  ' , nTFP , cien*nTFP/aTFP - cien
-      write(unitt,20) '  ' , 'TFP as in Solow  ' , mTFP , cien*mTFP/aTFP - cien
-      write(unitt,20) '  ' , 'Output per worker' , aY/aL
-      write(unitt,90) '  '
-      write(unitt,90) '  ' , 'Distortions: '
-      write(unitt,90) '  ' , '^^^^^^^^^^^^ '
-      write(unitt,20) '  ' , 'Average      ' , varmean( pol_tau , w = Gz )
-      write(unitt,20) '  ' , 'Small firms  ' , varmean( pol_tau , w = Gz , mask=pol_n.lt.s_lab%p10%m )
-      write(unitt,20) '  ' , 'Large firms  ' , varmean( pol_tau , w = Gz , mask=pol_n.gt.s_lab%p90%m )
-      write(unitt,90) '  '
-      write(unitt,90) '  ' , 'Aggregates: '
-      write(unitt,90) '  ' , '^^^^^^^^^^^ '
-      write(unitt,20) '  ' , 'Output      ' , aY
-      write(unitt,20) '  ' , 'Capital     ' , aK , aK/aY
-      write(unitt,20) '  ' , 'Labor       ' , aL 
-      write(unitt,20) '  ' , 'Consumption ' , aC
-      write(unitt,20) '  ' , 'Government  ' , aT
-      write(unitt,90) '  '
-      write(unitt,20) '  ' , 'Labor sh.   ' , wage*aL/(rrate*aK + aP + wage*aL + aT)
-      write(unitt,20) '  ' , 'Capital sh. ' , (rrate*aK + aP)/(rrate*aK + aP + wage*aL + aT)
-      write(unitt,90) '  '
-      write(unitt,90) '  '
-      write(unitt,90) '  ' , repeat('*',41)
-      write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff '
-      write(unitt,90) '  ' ,  repeat('*',41)
-      write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one
-      write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one
-      write(unitt,90) '  ' ,  repeat('-',41)
-      write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one
-      write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one
-      write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one
-      write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one
-      write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one
-      write(unitt,90) '  ' ,  repeat('-',41)
-      write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m  , shr_firms%d  , shr_firms%m/shr_firms%d - one
-      write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m  , shr_labor%d  , shr_labor%m/shr_labor%d - one
-      write(unitt,90) '  ' ,  repeat('-',41)
-      write(unitt,10) '  ' , 'Capital: average ' , s_kap%mean%m , s_kap%mean%d , s_kap%mean%m/s_kap%mean%d - one
-      write(unitt,90) '  ' ,  repeat('*',41)
-      write(unitt,90) '  '
-      write(unitt,90) '  '
-      if (unitt.gt.0) close(unitt)
-
+    !
+    ! unitnum = 1: solution file, 2: calibration file
+    if (unitt.eq.1) open(unit=unitt,file=outfile("solve",vname),action='write',status="replace")
+    if (unitt.eq.2) open(unit=unitt,file=outfile("calib",vname),action='write',status="replace")
+    !
+    99 continue
+    !
+    ! parameters first, in the order setversion reads them (the calibration file can be copied into
+    ! txtfiles/, removing the date, to be used as input)
+    write(unitt,33) rrate,'rrate'
+    write(unitt,33) xi,'xi'
+    write(unitt,33) uz,'uz'
+    write(unitt,33) gamma,'gamma'
+    write(unitt,33) dble(withk),'withk (not read)'
+    write(unitt,90) '  '
+    write(unitt,90) '  '
+    write(unitt,90) '  ' , 'Equilibrium:     '
+    write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
+    write(unitt,20) '  ' , 'Wage rate        ' , wage
+    write(unitt,20) '  ' , 'Share managers   ' , M*cien
+    write(unitt,90) '  '
+    write(unitt,90) '  ' , 'Productivity:    '
+    write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
+    write(unitt,20) '  ' , 'Z                ' , aZ   
+    write(unitt,20) '  ' , 'TFP              ' , TFP0 
+    write(unitt,20) '  ' , 'TFP as in Guner  ' , TFP1
+    write(unitt,20) '  ' , 'TFP as in Solow  ' , TFP2
+    write(unitt,20) '  ' , 'TFP with N+M     ' , TFP3 
+    write(unitt,20) '  ' , 'Output per worker' , aY/aL
+    write(unitt,90) '  '
+    write(unitt,90) '  ' , 'Aggregates: '
+    write(unitt,90) '  ' , '^^^^^^^^^^^ '
+    write(unitt,20) '  ' , 'Output      ' , aY
+    write(unitt,20) '  ' , 'Capital     ' , aK , aK/aY
+    write(unitt,20) '  ' , 'Labor       ' , aL 
+    write(unitt,20) '  ' , 'Consumption ' , aC
+    write(unitt,20) '  ' , 'Government  ' , aT
+    write(unitt,20) '  ' , 'Labor sh.   ' , wage*aL/(rrate*aK + aP + wage*aL + aT)
+    write(unitt,20) '  ' , 'Capital sh. ' , (rrate*aK + aP)/(rrate*aK + aP + wage*aL + aT)
+    write(unitt,90) '  '
+    write(unitt,90) '  '
+    write(unitt,90) '  ' , repeat('*',41)
+    write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff '
+    write(unitt,90) '  ' ,  repeat('*',41)
+    write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one
+    write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one
+    write(unitt,90) '  ' ,  repeat('-',41)
+    write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one
+    write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one
+    write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one
+    write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one
+    write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one
+    write(unitt,90) '  ' ,  repeat('-',41)
+    write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m  , shr_firms%d  , shr_firms%m/shr_firms%d - one
+    write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m  , shr_labor%d  , shr_labor%m/shr_labor%d - one
+    write(unitt,90) '  ' ,  repeat('*',41)
+    write(unitt,90) '  '
+    write(unitt,90) '  '
+    !
+    if (unitt.gt.0) close(unitt)
+    !
+    if (unitt.gt.0) then
+      unitt = 0 ; goto 99
+    end if
+    !
     return
     90 format (a,a)
     10 format (a,a,10(f8.2))

@@ -9,3 +9,10 @@ tmp_mod
 tmp_mod/*.*
 results/*.*
 compiledfiles/*.*
+other_files/*
+.agents
+.codex
+*.py
+__pycache__
+run_*
+.backups/

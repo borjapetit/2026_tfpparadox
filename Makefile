@@ -1,20 +1,10 @@
 
-# MAKEFILE for the recplication code
+# MAKEFILE for the replication code
 
 UNAME_S := $(shell uname -s)
 
-ifeq ($(UNAME_S),Linux)
-pwd = /mnt/c/Users/bpetit/Dropbox/research/projects/2021_bunching/code_tfp
-name = model
-endif
-
-ifeq ($(UNAME_S),Darwin)
-pwd = /Users/borjapetit/Library/CloudStorage/Dropbox/research/projects/2021_bunching/code_tfp
-name = model
-endif
-
 fcomp = gfortran
-flags = -fopenmp -finit-local-zero -ffixed-line-length-450 -J $(pwd)/compiledfiles/
+flags = -fopenmp -finit-local-zero -ffixed-line-length-450 -J compiledfiles/
 files = toolkit.f90 parameters.f90 lucas.f90 hugo.f90 main.f90
 
 model: $(files)
@@ -27,7 +17,7 @@ model: $(files)
 	rm -f *.log
 	rm -rf *.dSYM
 	echo "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-	$(fcomp)  -O3 ${flags} ${files} -o ${name}
+	$(fcomp)  -O3 ${flags} ${files} -o model
 
 check: $(files)
 	rm -f model*

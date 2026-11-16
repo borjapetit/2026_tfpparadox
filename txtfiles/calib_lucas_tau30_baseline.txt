@@ -1,0 +1,49 @@
+  0.06377318 ! rrate
+  2.35437851 ! xi
+  1.00000000 ! uz
+  0.63773183 ! gamma
+  1.00000000 ! withk (not read)
+  
+  
+  Equilibrium:     
+  ^^^^^^^^^^^^^    
+  Wage rate            1.887953
+  Share managers       6.504611
+  
+  Productivity:    
+  ^^^^^^^^^^^^^    
+  Z                  201.183149
+  TFP                  2.538550
+  TFP as in Guner      2.601104
+  TFP as in Solow      1.036190
+  TFP with N+M         2.463468
+  Output per worker    4.229170
+  
+  Aggregates: 
+  ^^^^^^^^^^^ 
+  Output          3.954328
+  Capital        11.862984    3.000000
+  Labor           0.935013
+  Consumption     3.197788
+  Government      0.429758
+  Labor sh.       0.446412
+  Capital sh.     0.444907
+  
+  
+  *****************************************
+  MOMENTS             Model    Data    Diff 
+  *****************************************
+  Labor: average      14.37   14.37   -0.00
+  Labor: std logs      1.09    1.17   -0.07
+  -----------------------------------------
+  Labor: p10           1.99    1.00    0.99
+  Labor: p25           2.47    2.00    0.23
+  Labor: p50           3.97    3.63    0.09
+  Labor: p75           8.94    8.11    0.10
+  Labor: p90          26.18   19.63    0.33
+  -----------------------------------------
+  Share firms n>50     5.76    3.26    0.77
+  Labor in n>50       54.85   54.83    0.00
+  *****************************************
+  
+  

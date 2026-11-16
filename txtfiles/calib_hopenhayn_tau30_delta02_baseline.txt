@@ -1,0 +1,60 @@
+  0.07357544 ! rrate
+  0.02000000 ! eprob
+  1.08090193 ! fcost
+  3.27028141 ! ecost
+  3.27680711 ! xi (not used)
+  1.00000000 ! uz (not used)
+  0.96400000 ! rhoz
+  0.13990989 ! stdz
+ -0.27632823 ! muz0
+  0.37466752 ! stdz0
+  0.73575439 ! gamma
+  1.00000000 ! eta0
+  2.00000000 ! eta1
+  0.00000000 ! ecostinw
+  1.00000000 ! withk
+  
+  Equilibrium:     
+  ^^^^^^^^^^^^^    
+  Wage rate            0.490074
+  Mass of firms        0.063166    6.455027
+  
+  Productivity:    
+  ^^^^^^^^^^^^^    
+  Z                    4.999998
+  TFP                  0.737449
+  TFP as in Guner      0.754881
+  TFP as in Solow      0.572138
+  TFP with N+M         0.712536
+  Output per worker    0.951548
+  
+  Aggregates: 
+  ^^^^^^^^^^^ 
+  Output          0.871030
+  Capital         2.613090    3.000000
+  Labor           0.915383    0.978548
+  Consumption     0.584866
+  Government      0.048567
+  Exit rate       7.991171
+  Grid: mass at top node (should be ~0)     0.000000
+  Grid: mass at top node (should be ~0)     0.000000
+  
+  *****************************************
+  MOMENTS             Model    Data    Diff 
+  *****************************************
+  Labor: average      14.49   14.37    0.01
+  Labor: std logs      1.35    1.17    0.15
+  Labor: persisten     0.96    0.96    0.00
+  Labor: p10           1.20    1.00    0.20
+  Labor: p25           2.06    2.00    0.03
+  Labor: p50           4.48    3.63    0.23
+  Labor: p75          11.21    8.11    0.38
+  Labor: p90          28.05   19.63    0.43
+  -----------------------------------------
+  E Labor: average     5.04    5.12   -0.02
+  E Labor: p90        10.35    7.25    0.43
+  -----------------------------------------
+  Share firms n>50     5.15    3.26    0.58
+  Labor in n>50       49.78   54.83   -0.09
+  *****************************************
+  
