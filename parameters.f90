@@ -42,6 +42,7 @@ module parameters
   ! technology & others
   real(rp) :: gamma
   real(rp) :: beta
+  real(rp) :: depre
   real(rp) :: eprob
   real(rp) :: fcost
   real(rp) :: ecost
@@ -81,13 +82,10 @@ module parameters
   real(rp) :: aC
   real(rp) :: aP
   real(rp) :: aT
-  real(rp) :: aZ
-  real(rp) :: aZ1
-  real(rp) :: aZ2
-  real(rp) :: TFP0    ! our definition
-  real(rp) :: TFP1    ! nezih's definitoon
-  real(rp) :: TFP2    ! econometrician
-  real(rp) :: TFP3    ! using total population
+  real(rp) :: TFP     ! TFP as in eq. 8
+  real(rp) :: TFPL    ! TFP with N+M
+  real(rp) :: TFPC    ! TFP with net output 
+  real(rp) :: TFPLC   ! TFP with N+M and net output
 
   type :: results
     real(rp) :: wage
@@ -100,13 +98,10 @@ module parameters
     real(rp) :: aC
     real(rp) :: aP
     real(rp) :: aT
-    real(rp) :: aZ
-    real(rp) :: aZ1
-    real(rp) :: aZ2
-    real(rp) :: TFP0    ! our definition
-    real(rp) :: TFP1    ! nezih's definitoon
-    real(rp) :: TFP2    ! econometrician
-    real(rp) :: TFP3    ! using total population
+    real(rp) :: TFP      ! TFP as in eq. 8
+    real(rp) :: TFPL     ! TFP with N+M
+    real(rp) :: TFPC     ! TFP with net output 
+    real(rp) :: TFPLC    ! TFP with N+M and net output
     real(rp) , allocatable :: k(:)
     real(rp) , allocatable :: n(:)
     real(rp) , allocatable :: y(:)
@@ -121,9 +116,6 @@ module parameters
     logical  , allocatable :: large(:)
     real(rp) , allocatable :: taxed(:)
   end type results
-
-  ! type(results) :: hugo
-  ! type(results) :: lucas
 
   ! ------------------------------------------------------------
   ! statistics parameters
@@ -359,11 +351,11 @@ module parameters
     real(rp)                              :: dM,dphi,dF
 
     if (.not.present(eco1)) then
-      write(numfile,'(30(f9.3))') zero,eco0%wage,eco0%TFP0,zero,zero,zero,zero,zero,zero,zero,zero,zero,&
-        eco0%M,eco0%aY,eco0%aK,eco0%aN,eco0%aL+eco0%M,eco0%aC,eco0%TFP1,eco0%TFP2,eco0%TFP3,wcondi,zero
+      write(numfile,'(30(f9.3))') zero,eco0%wage,eco0%TFP,zero,zero,zero,zero,zero,zero,zero,zero,zero,&
+        eco0%M,eco0%aY,eco0%aK,eco0%aN,eco0%aL+eco0%M,eco0%aC,eco0%TFPL,eco0%TFPC,eco0%TFPLC,wcondi,zero
       write(numfile,'(30(a9))') 'atau','wage','TFP','D.TFP','D.M','D.Phi','D.F',&
-        'E(t)','E(t|e)','E(t|s)','E(t|l)','taxed','D.E','D.Y','D.K','D.N','D.L','D.C','D.TFP1','D.TFP2','D.TFP3','wcondi',&
-        'tax_l'
+        'E(t)','E(t|e)','E(t|s)','E(t|l)','taxed','D.E','D.Y','D.K','D.N','D.L','D.C','D.TFPL','D.TFPC','D.TFPLC','wcondi',&
+        'welfare'
       write(numfile,'(30(f9.3))') zero,zero,zero,zero,zero,zero,zero,zero,zero,zero,zero,zero,&
         zero,zero,zero,zero,zero,zero,zero,zero,zero,zero,zero
       return
@@ -371,8 +363,8 @@ module parameters
     
     write(numfile,'(f9.3)',advance="no") cien*atau
     write(numfile,'(f9.3)',advance="no") cien*(eco1%wage/eco0%wage - one)
-    write(numfile,'(f9.3)',advance="no") eco1%TFP0
-    write(numfile,'(f9.3)',advance="no") cien*( eco1%TFP0/eco0%TFP0 - one)
+    write(numfile,'(f9.3)',advance="no") eco1%TFP
+    write(numfile,'(f9.3)',advance="no") cien*( eco1%TFP/eco0%TFP - one)
 
     T000 = aggTFP( eco0%M , eco0%tau , eco0%G , eco0%z )
     T100 = aggTFP( eco1%M , eco0%tau , eco0%G , eco0%z )
@@ -406,14 +398,13 @@ module parameters
     write(numfile,'(f9.3)',advance="no") cien*((eco1%aL+eco1%M)/(eco0%aL+eco0%M) - one)
     write(numfile,'(f9.3)',advance="no") cien*(eco1%aC/eco0%aC - one)
 
-    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFP1/eco0%TFP1 - one)
-    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFP2/eco0%TFP2 - one)
-    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFP3/eco0%TFP3 - one)
+    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFPL/eco0%TFPL  - one)
+    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFPC/eco0%TFPC  - one)
+    write(numfile,'(f9.3)',advance="no") cien*(eco1%TFPLC/eco0%TFPLC - one)
 
     write(numfile,'(f9.3)',advance="no") wcondi
-
-    ! tax rate paid by firms above the cutoff (in %): equals atau in the symmetric experiment
-    write(numfile,'(f9.3)',advance="no") cien*max(zero,maxval(eco1%tau))
+    write(numfile,'(f9.3)',advance="no") cien*(-exp( log(eco0%aC) - eta0*(((eco0%aL)**(one+eta1))/(one+eta1)) +&
+     eta0*(((eco1%aL)**(one+eta1))/(one+eta1)) ) - eco1%aC)/eco0%aC
 
     write(numfile,'(a1 )',advance="yes") ' '
 

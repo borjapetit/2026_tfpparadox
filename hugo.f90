@@ -118,6 +118,10 @@ module hugo
       call setversion(2) ; call runexperiment( )
       write(*,'(/,a,/)') ' Entry/fixed costs in labor units'
       call setversion(3) ; call runexperiment( )
+      write(*,'(/,a,/)') ' Interest rate of 3%'
+      call setversion(1) ; rrate = 0.03_rp ; vname = "rrate_3" ; call calibmodel( ) ; call runexperiment("rrate_3")
+      write(*,'(/,a,/)') ' Interest rate of 5%'
+      call setversion(1) ; rrate = 0.05_rp ; vname = "rrate_5" ; call calibmodel( ) ; call runexperiment("rrate_5")
     case (5) ; call setversion(2) ; call equilibrium( ) ; call writehugo(1)
     case (6) ; call setversion(2) ; rrate = baserate( ) ; call calibmodel( ) ; call writehugo(1)
     case (7) ; call setversion(3) ; call equilibrium( ) ; call writehugo(1)
@@ -165,7 +169,7 @@ module hugo
       tau = taubase ; atau = zero ;
       exper : do ; atau = atau + 0.01_rp
        call equilibrium(distort) ; call printexer(ifile,base,distort) ; call printexer(0,base,distort)
-       if (atau.gt.0.20 .and. distort%TFP0/base%TFP0.lt.0.95_rp) exit exper
+       if (atau.gt.0.20 .and. distort%TFP/base%TFP.lt.0.95_rp) exit exper
        if (atau.gt.0.50) exit exper
       end do exper
 
@@ -195,6 +199,7 @@ module hugo
     end if
     open(unit=9,file=infile(vname),action="read")
       read(9,*) rrate
+      read(9,*) depre
       read(9,*) eprob
       read(9,*) fcost
       read(9,*) ecost
@@ -242,7 +247,7 @@ module hugo
     real(rp)                               :: zmu_u,zsd_u,zlo0,zhi0
     logical                                :: fullbr,fixw0
     real(rp)                               :: sw,sx,sy,sxx,sxy,wgt,xx,yy,ww
-    real(rp) , allocatable                 :: aux(:,:)    ! heap, not stack (nz x nz can be large)
+    real(rp) , allocatable                 :: aux(:,:)
     real(rp) , dimension(nz)               :: Gpz1,Gpz0
     logical , intent(in) , optional :: fixw
 
@@ -339,7 +344,8 @@ module hugo
     ! stationary distribution for unit mass of entrants
     M = one ; Gpz1 = zero
     do iter = 1,10000 ; Gpz0 = Gpz1
-      Gpz1 = (one-pol_e)*matmul(Gpz0,pz) + Gze       ! = transpose(pz)*Gpz0, without an nz x nz temporary
+      !Gpz1 = (one-pol_e)*matmul(Gpz0,pz) + Gze       ! = transpose(pz)*Gpz0, without an nz x nz temporary
+      Gpz1 = matmul((one-pol_e)*Gpz0,pz) + Gze
       test = maxval(abs(Gpz1 - Gpz0))
       if (test.lt.tol) exit
     end do
@@ -391,6 +397,7 @@ module hugo
     aY = sum(Gz*pol_y)
     aP = sum(Gz*pol_pi)
     aT = sum(Gz*pol_t)
+
     if (ecostinw.eq.0) then
       aL = aN
       aC = wage*aL + aP + aT - Me*ecost
@@ -402,37 +409,43 @@ module hugo
     ! ------------------------------------------------------------------------------------------------------------------------
     ! productivity measures
 
-    aZ1  = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
-    aZ2  = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
-    TFP0 = ( M**(one-gamma) )*aZ1/aZ2
-    aZ   = ( TFP0 / ( M**(one-gamma) ) )**(one/(one-gamma))
+    ! aZ1  = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
+    ! aZ2  = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
+    ! TFP  = ( M**(one-gamma) )*aZ1/aZ2
 
-    TFP1 = aY / ( ( aK**(gamma*alpha) ) * ( aL**(one-(gamma*alpha)) ) )
-    TFP2 = aY / ( ( aK**(one-(wage*aN/aY)) ) * ( aL**(wage*aN/aY) ) )
-    TFP3 = aY / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma )
+    ! main TFP definition (eq. 8)
+    TFP   = aY / ( ((aK**alpha) * ( aL**(one-alpha) )) ** gamma ) 
+
+    ! workers + entrepreneurs as labor input
+    TFPL  = aY / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma )
+
+    ! output net of entre and fixed costs
+    if (ecostinw.eq.0) TFPC  = (aY - Me*ecost - M*fcost ) / ( ((aK**alpha) * ( aL**(one-alpha) )) ** gamma )
+    if (ecostinw.eq.1) TFPC  = (aY - Me*ecost*wage - M*fcost*wage ) / ( ((aK**alpha) * ( aL**(one-alpha) )) ** gamma )
+
+    ! output net of entry and fixed costs and with workers+entrepreneurs as input of production
+    if (ecostinw.eq.0) TFPLC = (aY - Me*ecost - M*fcost ) / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma ) 
+    if (ecostinw.eq.1) TFPLC = (aY - Me*ecost*wage - M*fcost*wage ) / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma )
 
     ! ------------------------------------------------------------------------------------------------------------------------
     ! store results
 
     if (present(res)) then
 
-      res%wage = wage
-      res%M    = M
-      res%Me   = Me
-      res%aK   = aK
-      res%aN   = aN
-      res%aL   = aL
-      res%aY   = aY
-      res%aC   = aC
-      res%aP   = aP
-      res%aT   = aT
-      res%aZ   = aZ
-      res%aZ1  = aZ1
-      res%aZ2  = aZ2
-      res%TFP0 = TFP0
-      res%TFP1 = TFP1
-      res%TFP2 = TFP2
-      res%TFP3 = TFP3
+      res%wage  = wage
+      res%M     = M
+      res%Me    = Me
+      res%aK    = aK
+      res%aN    = aN
+      res%aL    = aL
+      res%aY    = aY
+      res%aC    = aC
+      res%aP    = aP
+      res%aT    = aT
+      res%TFP   = TFP
+      res%TFPL  = TFPL
+      res%TFPC  = TFPC
+      res%TFPLC = TFPLC
 
       if (allocated(res%k)   ) deallocate(res%k)   ; allocate (res%k(nz))
       if (allocated(res%n)   ) deallocate(res%n)   ; allocate (res%n(nz))
@@ -522,12 +535,12 @@ module hugo
     wage = w
 
     ! policy functions
-    pol_n = nstar(zgrid,pol_tau,rrate,wage)
-    pol_k = kstar(zgrid,pol_tau,rrate,wage)
+    pol_n = nstar(zgrid,pol_tau,rrate+depre,wage)
+    pol_k = kstar(zgrid,pol_tau,rrate+depre,wage)
     pol_y = output(zgrid,pol_k,pol_n)
 
-    if (ecostinw.eq.0) pol_pi = pol_y - wage*pol_n - rrate*pol_k - pol_tau*pol_y - fcost
-    if (ecostinw.eq.1) pol_pi = pol_y - wage*pol_n - rrate*pol_k - pol_tau*pol_y - fcost*wage
+    if (ecostinw.eq.0) pol_pi = pol_y - wage*pol_n - (rrate+depre)*pol_k - pol_tau*pol_y - fcost
+    if (ecostinw.eq.1) pol_pi = pol_y - wage*pol_n - (rrate+depre)*pol_k - pol_tau*pol_y - fcost*wage
 
     ! pol_t  = tau*(max(0.0d0,pol_pi+pol_tau*pol_y)) + pol_tau*pol_y
     ! pol_pi = pol_pi - tau*(max(0.0d0,pol_pi+pol_tau*pol_y))
@@ -543,13 +556,9 @@ module hugo
       test  = maxval(abs(vgues-vfunc))
     end do
     if (test.gt.tol) print * , ' warning: firm value function did not converge, error = ' , test
-    vfunc = vgues
-    ev    = matmul(pz,vfunc)
-    pol_e = eprob ; where(ev.le.zero) pol_e = one
-    ! fractional exit around the exit threshold: find the first node from the bottom with a positive
-    ! continuation value (j), locate the threshold zstar between nodes j-1 and j by linear interpolation,
-    ! and let firms in the part of each cell below zstar exit. The threshold then moves continuously
-    ! with the wage and the distortion, instead of jumping from node to node.
+
+    vfunc = vgues ; ev = matmul(pz,vfunc) ; pol_e = eprob ; where(ev.le.zero) pol_e = one
+
     j = 1
     do while (j.le.nz)
       if (ev(j).gt.zero) exit
@@ -586,7 +595,7 @@ module hugo
     real(rp)                   :: drho,sgn,lastsgn,gap0
     
     ! initial wage: solve the model once with free entry at the current parameters
-    if (withk.eq.1) rrate = gamma*alpha/3.0_rp
+    if (withk.eq.1) depre = gamma*alpha/3.0_rp - rrate
 
     call equilibrium( ) ; wfix = wage
 
@@ -649,7 +658,7 @@ module hugo
     end if
     !eprob =  xp(i) ; i=i+1      ! exogenous exit probability (delta)
 
-    if (withk.eq.1) rrate = gamma*alpha/3.0_rp
+    if (withk.eq.1) depre = gamma*alpha/3.0_rp - rrate
 
     call equilibrium(fixw=.true.) ; i = 1
 
@@ -675,6 +684,108 @@ module hugo
   end function funcmodel
 
   ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! averages by age, from entrants (age 0) to age 20, in the equilibrium just solved.
+  ! A cohort starts with the distribution of entrants, Gze, and evolves with the same law of motion
+  ! as the stationary distribution in equilibrium: h(a+1) = ((1-pol_e)*h(a))*pz. Summing h(a) over
+  ! all ages gives the stationary distribution, Gz (up to the scale M/Me).
+  ! Columns: age; survival (% of entrants still active); share of active firms (%); averages of
+  ! productivity (z, in levels), output (y) and labor (n); and exit rate (%): share of the firms of
+  ! age a that are not active at age a+1, 1 - mass(a+1)/mass(a). The last row is the average over all
+  ! active firms; its exit rate is exits over active firms, which in the steady state equals Me/M.
+  ! Written to unit un (called by writehugo, after the moments).
+
+  subroutine agestats(un)
+    implicit none
+    integer  , intent(in) :: un
+    integer  , parameter  :: amax = 20
+    real(rp)              :: h(nz),hn(nz),mass,mass0,cmass
+    integer               :: a
+      write(un,'(a)') '  '
+      write(un,'(a)') ' Averages by age (age 0 = entrants)'
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+      write(un,'(a)') '   age  survival(%)  share(%)           z           y           n   exit(%)'
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+      h = Gze ; mass0 = sum(h)
+      do a = 0,amax
+        mass  = sum(h) ; if (mass.le.zero) exit
+        hn    = matmul((one-pol_e)*h,pz)
+        cmass = sum(hn)                      ! mass of the cohort at age a+1
+        write(un,'(i6,2f13.2,3f12.4,f10.2)') a, cien*mass/mass0, cien*mass*Me/M, &
+          sum(exp(zgrid)*h)/mass, sum(pol_y*h)/mass, sum(pol_n*h)/mass, cien*(one-cmass/mass)
+        h = hn
+      end do
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+      write(un,'(a6,2a13,3f12.4,f10.2)') '   all','','', &
+        sum(exp(zgrid)*Gz)/sum(Gz), sum(pol_y*Gz)/sum(Gz), sum(pol_n*Gz)/sum(Gz), cien*Me/M
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+    return
+  end subroutine agestats
+
+  ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ! lambda of the paper (Section 2.6 and Appendix C.3), in the equilibrium just solved (phihat = 0):
+  !
+  !   lambda = E sum_t d_t iota_t x_t / E sum_t d_t x_t ,   x = z^(1/(1-gamma)) ,
+  !
+  ! the share of an entrant's expected discounted output that is subsidized, minus the share that is
+  ! taxed. d_t = beta^t times the probability of being active at age t, with beta = 1/(1+rrate) as in
+  ! the value function, and iota = 1 below the revenue-neutral cutoff z* and -1 above it. As
+  ! phihat -> 0, z* splits the output of active firms (sum of x*Gz) in two halves; in the node whose
+  ! cell contains z*, iota = 2f-1, with f the share of the cell below z* (the cell rule of the
+  ! symmetric experiment). The cohort evolves as in agestats: h(t+1) = ((1-pol_e)*h(t))*pz.
+  !
+  ! Also reported: the wage response, dlog w/dphihat = lambda/((1-alpha)*gamma), and the wage term of
+  ! B(0), (1-alpha*gamma)/((1-alpha)*gamma)*lambda (alpha = 0 without capital). As a check, lambda
+  ! without discounting (beta = 1) weights each age as the cross-section does and must be ~0 by
+  ! revenue neutrality. Written to unit un (called by writehugo, after the moments).
+
+  subroutine lambdastat(un)
+    implicit none
+    integer  , intent(in) :: un
+    integer  , parameter  :: tmax = 5000
+    real(rp)              :: x(nz),iota(nz),h(nz),cum,halfx,f,zst,disc,dd,num,den,lam(2),aeff,cs
+    integer               :: k,t,j
+
+    ! revenue-neutral cutoff and iota
+    x = exp(zgrid/(one-gamma)) ; halfx = half*sum(x*Gz) ; cum = zero ; iota = -one ; zst = zgrid(nz)
+    do k = 1,nz
+      if (cum + x(k)*Gz(k) .lt. halfx) then
+        iota(k) = one ; cum = cum + x(k)*Gz(k)
+      else
+        f = (halfx-cum)/(x(k)*Gz(k)) ; iota(k) = two*f - one ; zst = zlo(k) + f*(zhi(k)-zlo(k))
+        exit
+      end if
+    end do
+    cs = sum(iota*x*Gz)/sum(x*Gz)                 ! cross-section: zero by construction
+
+    ! lambda with discounting (j = 1) and without (j = 2, check)
+    do j = 1,2
+      disc = one/(one+rrate) ; if (j.eq.2) disc = one
+      h = Gze ; dd = one ; num = zero ; den = zero
+      do t = 0,tmax
+        num = num + dd*sum(iota*x*h)
+        den = den + dd*sum(x*h)
+        h   = matmul((one-pol_e)*h,pz) ; dd = dd*disc
+        if (sum(h).lt.1.0e-12_rp) exit
+      end do
+      lam(j) = num/den
+    end do
+
+    aeff = alpha*dble(withk)
+      write(un,'(a)') '  '
+      write(un,'(a)') ' Value of entry and distortions (Section 2.6)'
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+      write(un,'(a,f12.6)') ' lambda                                       ',lam(1)
+      write(un,'(a,f12.6)') ' dlog w / dphihat = lambda/((1-alpha)*gamma)  ',lam(1)/((one-aeff)*gamma)
+      write(un,'(a,f12.6)') ' wage term of B(0)                            ',(one-aeff*gamma)/((one-aeff)*gamma)*lam(1)
+      write(un,'(a,f12.6)') ' cutoff z* (in levels)                        ',exp(zst)
+      write(un,'(a)') ' checks (should be ~0):'
+      write(un,'(a,f12.6)') '   lambda without discounting                 ',lam(2)
+      write(un,'(a,f12.6)') '   cross-section, sum(iota*x*Gz)/sum(x*Gz)    ',cs
+      write(un,'(a)') ' ------------------------------------------------------------------------------'
+    return
+  end subroutine lambdastat
+
   ! output file: the first lines are the parameters, in the order setversion reads them, so the
   ! calibration file can be copied into txtfiles/ (removing the date) to be used as input
   ! (xi and uz are written but not used). unitnum = 1: solution file, 2: calibration file
@@ -692,6 +803,7 @@ module hugo
     if (unitt.eq.2) open(unit=unitt,file=outfile("calib",vname),action='write',status="replace")
     !
     write(unitt,33) rrate,'rrate'
+    write(unitt,33) depre,'depre'
     write(unitt,33) eprob,'eprob'
     write(unitt,33) fcost,'fcost'
     write(unitt,33) ecost,'ecost'
@@ -714,11 +826,10 @@ module hugo
     write(unitt,90) '  '
     write(unitt,90) '  ' , 'Productivity:    '
     write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
-    write(unitt,20) '  ' , 'Z                ' , aZ
-    write(unitt,20) '  ' , 'TFP              ' , TFP0
-    write(unitt,20) '  ' , 'TFP as in Guner  ' , TFP1
-    write(unitt,20) '  ' , 'TFP as in Solow  ' , TFP2
-    write(unitt,20) '  ' , 'TFP with N+M     ' , TFP3
+    write(unitt,20) '  ' , 'TFP              ' , TFP
+    write(unitt,20) '  ' , 'TFP w. N+M       ' , TFPL
+    write(unitt,20) '  ' , 'TFP w. net Y     ' , TFPC
+    write(unitt,20) '  ' , 'TFP w. N+M & net ' , TFPLC
     write(unitt,20) '  ' , 'Output per worker' , aY/aL
     write(unitt,90) '  '
     write(unitt,90) '  ' , 'Aggregates: '
@@ -732,24 +843,44 @@ module hugo
     write(unitt,20) '  ' , 'Grid: mass at top node (should be ~0) ' , Gz(nz)/sum(Gz)
     write(unitt,20) '  ' , 'Grid: mass at top node (should be ~0) ' , Gz(size(Gz))/sum(Gz)
     write(unitt,90) '  '
-    write(unitt,90) '  ' , repeat('*',41)
-    write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff '
-    write(unitt,90) '  ' ,  repeat('*',41)
-    write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one
-    write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one
-    write(unitt,10) '  ' , 'Labor: persisten ' , rho_n%m      , rho_n%d      , rho_n%m/rho_n%d - one
-    write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one
-    write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one
-    write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one
-    write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one
-    write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one
-    write(unitt,90) '  ' ,  repeat('-',41)
-    write(unitt,10) '  ' , 'E Labor: average ' , s_lab0%mean%m , s_lab0%mean%d , s_lab0%mean%m/s_lab0%mean%d - one
-    write(unitt,10) '  ' , 'E Labor: p90     ' , s_lab0%p90%m  , s_lab0%p90%d  , s_lab0%p90%m/s_lab0%p90%d - one
-    write(unitt,90) '  ' ,  repeat('-',41)
-    write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m   , shr_firms%d   , shr_firms%m/shr_firms%d - one
-    write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m   , shr_labor%d   , shr_labor%m/shr_labor%d - one
-    write(unitt,90) '  ' ,  repeat('*',41)
+    ! all the moments the model computes; * = used in the calibration
+    write(unitt,90) '  ' , repeat('*',44)
+    write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff   '
+    write(unitt,90) '  ' ,  repeat('*',44)
+    write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one , ' *'
+    write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one   , ' *'
+    write(unitt,10) '  ' , 'Labor: persisten ' , rho_n%m      , rho_n%d      , rho_n%m/rho_n%d - one             , ' *'
+    write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one   , ' *'
+    write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one   , '  '
+    write(unitt,90) '  ' ,  repeat('-',44)
+    write(unitt,10) '  ' , 'E Labor: average ' , s_lab0%mean%m , s_lab0%mean%d , s_lab0%mean%m/s_lab0%mean%d - one , ' *'
+    write(unitt,10) '  ' , 'E Labor: std logs' , s_lab0%std%m  , s_lab0%std%d  , s_lab0%std%m/s_lab0%std%d - one   , '  '
+    write(unitt,10) '  ' , 'E Labor: p10     ' , s_lab0%p10%m  , s_lab0%p10%d  , s_lab0%p10%m/s_lab0%p10%d - one   , '  '
+    write(unitt,10) '  ' , 'E Labor: p25     ' , s_lab0%p25%m  , s_lab0%p25%d  , s_lab0%p25%m/s_lab0%p25%d - one   , '  '
+    write(unitt,10) '  ' , 'E Labor: p50     ' , s_lab0%p50%m  , s_lab0%p50%d  , s_lab0%p50%m/s_lab0%p50%d - one   , '  '
+    write(unitt,10) '  ' , 'E Labor: p75     ' , s_lab0%p75%m  , s_lab0%p75%d  , s_lab0%p75%m/s_lab0%p75%d - one   , '  '
+    write(unitt,10) '  ' , 'E Labor: p90     ' , s_lab0%p90%m  , s_lab0%p90%d  , s_lab0%p90%m/s_lab0%p90%d - one   , '  '
+    write(unitt,90) '  ' ,  repeat('-',44)
+    write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m   , shr_firms%d   , shr_firms%m/shr_firms%d - one     , '  '
+    write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m   , shr_labor%d   , shr_labor%m/shr_labor%d - one     , ' *'
+    write(unitt,90) '  ' ,  repeat('-',44)
+    if (fixcf) then
+    write(unitt,10) '  ' , 'Exit rate        ' , s_e%m         , s_e%d         , s_e%m/s_e%d - one                 , '  '
+    else
+    write(unitt,10) '  ' , 'Exit rate        ' , s_e%m         , s_e%d         , s_e%m/s_e%d - one                 , ' *'
+    end if
+    if (withk.eq.1) then
+    write(unitt,10) '  ' , 'Capital/output   ' , aK/aY         , 3.0_rp        , (aK/aY)/3.0_rp - one              , ' *'
+    end if
+    write(unitt,90) '  ' ,  repeat('*',44)
+    write(unitt,90) '  '
+    !
+    ! age profiles and lambda (Section 2.6)
+    call agestats(unitt)
+    call lambdastat(unitt)
     write(unitt,90) '  '
     !
     if (unitt.gt.0) close(unitt)
@@ -761,7 +892,7 @@ module hugo
     return
     !
     90 format (a,a)
-    10 format (a,a,10(f8.2))
+    10 format (a,a,3(f8.2),a)
     20 format (a,a,3(f12.6))
     33 format (f12.8,' ! ',a)
   end subroutine writehugo

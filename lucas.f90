@@ -137,7 +137,7 @@ module lucas
       ! distorted economies
       tau = taubase ; atau = zero ; exper : do ; atau = atau + 0.01_rp
         call equilibrium(distort) ; call printexer(ifile,base,distort) ; call printexer(0,base,distort)
-        if (atau.gt.0.20 .and. distort%TFP0/base%TFP0.lt.0.95_rp) exit exper
+        if (atau.gt.0.20 .and. distort%TFP/base%TFP.lt.0.95_rp) exit exper
         if (atau.gt.0.50) exit exper
       end do exper
 
@@ -255,8 +255,9 @@ module lucas
     ! ------------------------------------------------------------
     ! equilibrium objects
 
-    M  = sum(Gz)                ! mass of firms
     pol_e = zero                ! no exit in the static economy
+
+    M  = sum(Gz)                ! mass of firms
     Me = M                      ! mass of entrants
     aK = sum(Gz*pol_k)          ! aggregate capital
     aN = sum(Gz*pol_n)          ! aggregate labor in production
@@ -266,43 +267,46 @@ module lucas
     aY = sum(Gz*pol_y)          ! aggregate output
     aC = wage*aN + aP + aT      ! aggregate consumption
 
-    ! aggregate TFP
-    aZ1 = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
-    aZ2 = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
-    TFP0  = ( M**(one-gamma) )*aZ1/aZ2
-    aZ    = ( TFP0 / ( M**(one-gamma) )  )**(one/(one-gamma))
+    ! ! aggregate TFP
+    ! aZ1 = varmean( (((one - pol_tau)**gamma)*exp(zgrid))**(one/(one-gamma)) , w = Gz )
+    ! aZ2 = varmean( (((one - pol_tau)       )*exp(zgrid))**(one/(one-gamma)) , w = Gz )**gamma
+    ! TFP0  = ( M**(one-gamma) )*aZ1/aZ2
+    ! aZ    = ( TFP0 / ( M**(one-gamma) )  )**(one/(one-gamma))
     
-    ! TFP as in Guner et al
-    TFP1 = aY / ( ( aK**(gamma*alpha) ) * ( aL**(one-(gamma*alpha)) ) )
+    ! ! TFP as in Guner et al
+    ! TFP1 = aY / ( ( aK**(gamma*alpha) ) * ( aL**(one-(gamma*alpha)) ) )
 
-    ! measured TFP as an econometrician
-    TFP2 = aY / ( ( aK**(one-(wage*aL/aY)) ) * ( aL**(wage*aL/aY) ) )
+    ! ! measured TFP as an econometrician
+    ! TFP2 = aY / ( ( aK**(one-(wage*aL/aY)) ) * ( aL**(wage*aL/aY) ) )
 
-    ! TFP using total population
-    TFP3 = aY / ( ( (aK**alpha) * ( (aL+M)**(one-alpha) ) ) ** gamma )
+    ! ! TFP using total population
+    ! TFP3 = aY / ( ( (aK**alpha) * ( (aL+M)**(one-alpha) ) ) ** gamma )
+
+    TFP   = aY / ( ((aK**alpha) * (     aL**(one-alpha) )) ** gamma ) 
+    TFPL  = aY / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma )
+    TFPC  = aY / ( ((aK**alpha) * (     aL**(one-alpha) )) ** gamma )
+    TFPLC = aY / ( ((aK**alpha) * ( (aL+M)**(one-alpha) )) ** gamma )
+
 
     ! ------------------------------------------------------------
     ! store results
 
     if (present(res)) then
 
-      res%wage = wage
-      res%M    = M
-      res%Me   = M
-      res%aK   = aK
-      res%aN   = aN
-      res%aL   = aL
-      res%aY   = aY
-      res%aC   = aC
-      res%aP   = aP
-      res%aT   = aT
-      res%aZ   = aZ
-      res%aZ1  = aZ1
-      res%aZ2  = aZ2
-      res%TFP0 = TFP0
-      res%TFP1 = TFP1
-      res%TFP2 = TFP2
-      res%TFP3 = TFP3
+      res%wage  = wage
+      res%M     = M
+      res%Me    = M
+      res%aK    = aK
+      res%aN    = aN
+      res%aL    = aL
+      res%aY    = aY
+      res%aC    = aC
+      res%aP    = aP
+      res%aT    = aT
+      res%TFP   = TFP
+      res%TFPL  = TFPL
+      res%TFPC  = TFPC
+      res%TFPLC = TFPLC
 
       if (allocated(res%k)   ) deallocate(res%k)   ; allocate (res%k(nz))
       if (allocated(res%n)   ) deallocate(res%n)   ; allocate (res%n(nz))
@@ -482,7 +486,7 @@ module lucas
     !
     ! parameters first, in the order setversion reads them (the calibration file can be copied into
     ! txtfiles/, removing the date, to be used as input)
-    write(unitt,33) rrate,'rrate'
+    write(unitt,33) rrate,'rrate+depreciation'
     write(unitt,33) xi,'xi'
     write(unitt,33) uz,'uz'
     write(unitt,33) gamma,'gamma'
@@ -496,11 +500,8 @@ module lucas
     write(unitt,90) '  '
     write(unitt,90) '  ' , 'Productivity:    '
     write(unitt,90) '  ' , '^^^^^^^^^^^^^    '
-    write(unitt,20) '  ' , 'Z                ' , aZ   
-    write(unitt,20) '  ' , 'TFP              ' , TFP0 
-    write(unitt,20) '  ' , 'TFP as in Guner  ' , TFP1
-    write(unitt,20) '  ' , 'TFP as in Solow  ' , TFP2
-    write(unitt,20) '  ' , 'TFP with N+M     ' , TFP3 
+    write(unitt,20) '  ' , 'TFP              ' , TFP
+    write(unitt,20) '  ' , 'TFP with N+M     ' , TFPL
     write(unitt,20) '  ' , 'Output per worker' , aY/aL
     write(unitt,90) '  '
     write(unitt,90) '  ' , 'Aggregates: '
@@ -514,21 +515,25 @@ module lucas
     write(unitt,20) '  ' , 'Capital sh. ' , (rrate*aK + aP)/(rrate*aK + aP + wage*aL + aT)
     write(unitt,90) '  '
     write(unitt,90) '  '
-    write(unitt,90) '  ' , repeat('*',41)
-    write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff '
-    write(unitt,90) '  ' ,  repeat('*',41)
-    write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one
-    write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one
-    write(unitt,90) '  ' ,  repeat('-',41)
-    write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one
-    write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one
-    write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one
-    write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one
-    write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one
-    write(unitt,90) '  ' ,  repeat('-',41)
-    write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m  , shr_firms%d  , shr_firms%m/shr_firms%d - one
-    write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m  , shr_labor%d  , shr_labor%m/shr_labor%d - one
-    write(unitt,90) '  ' ,  repeat('*',41)
+    ! all the moments the model computes; * = used in the calibration
+    write(unitt,90) '  ' , repeat('*',44)
+    write(unitt,90) '  ' , 'MOMENTS             Model    Data    Diff   '
+    write(unitt,90) '  ' ,  repeat('*',44)
+    write(unitt,10) '  ' , 'Labor: average   ' , s_lab%mean%m , s_lab%mean%d , s_lab%mean%m/s_lab%mean%d - one , ' *'
+    write(unitt,10) '  ' , 'Labor: std logs  ' , s_lab%std%m  , s_lab%std%d  , s_lab%std%m/s_lab%std%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p10       ' , s_lab%p10%m  , s_lab%p10%d  , s_lab%p10%m/s_lab%p10%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p25       ' , s_lab%p25%m  , s_lab%p25%d  , s_lab%p25%m/s_lab%p25%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p50       ' , s_lab%p50%m  , s_lab%p50%d  , s_lab%p50%m/s_lab%p50%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p75       ' , s_lab%p75%m  , s_lab%p75%d  , s_lab%p75%m/s_lab%p75%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor: p90       ' , s_lab%p90%m  , s_lab%p90%d  , s_lab%p90%m/s_lab%p90%d - one   , '  '
+    write(unitt,90) '  ' ,  repeat('-',44)
+    write(unitt,10) '  ' , 'Share firms n>50 ' , shr_firms%m  , shr_firms%d  , shr_firms%m/shr_firms%d - one   , '  '
+    write(unitt,10) '  ' , 'Labor in n>50    ' , shr_labor%m  , shr_labor%d  , shr_labor%m/shr_labor%d - one   , ' *'
+    if (withk.eq.1) then
+    write(unitt,90) '  ' ,  repeat('-',44)
+    write(unitt,10) '  ' , 'Capital/output   ' , aK/aY        , 3.0_rp       , (aK/aY)/3.0_rp - one            , ' *'
+    end if
+    write(unitt,90) '  ' ,  repeat('*',44)
     write(unitt,90) '  '
     write(unitt,90) '  '
     !
@@ -540,7 +545,7 @@ module lucas
     !
     return
     90 format (a,a)
-    10 format (a,a,10(f8.2))
+    10 format (a,a,3(f8.2),a)
     20 format (a,a,3(f12.6))
     33 format (f12.8,' ! ',a)
   end subroutine writelucas
